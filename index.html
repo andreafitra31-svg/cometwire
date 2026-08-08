@@ -40,6 +40,24 @@
     table th { position: sticky; top: 0; }
     .toast { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .chart-wrap { position: relative; height: 220px; }
+    .chart-grid {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .chart-grid div {
+      border-top: 1px dashed #e5e7eb;
+      height: 0;
+    }
+    .chart-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
   </style>
 </head>
  <body class="w-full min-h-screen bg-gray-50">
@@ -116,8 +134,18 @@
       <div id="stock-comparison" class="space-y-3"></div>
      </div>
      <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-700 mb-4">Grafik Pemakaian</h3>
-      <div id="usage-chart" class="h-48 flex items-end gap-1"></div>
+      <h3 class="text-sm font-semibold text-gray-700 mb-2">Grafik Pemakaian NEW vs RE-USE</h3>
+      <div class="text-xs text-gray-400 mb-3">Linear berdasarkan hari, bulan, atau tahun</div>
+      <div id="usage-chart" class="chart-wrap">
+        <div class="chart-grid">
+          <div></div><div></div><div></div><div></div><div></div>
+        </div>
+        <svg id="usage-chart-svg" class="chart-svg" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="mt-3 flex items-center gap-4 text-xs">
+        <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-600 inline-block"></span> NEW</span>
+        <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> RE-USE</span>
+      </div>
      </div>
     </div>
 
@@ -187,8 +215,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
      <h2 class="text-xl font-bold text-gray-900">Riwayat Pemakaian</h2>
      <div class="flex gap-2">
-      <button onclick="exportData('usage','excel')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export Excel</button>
-      <button onclick="exportData('usage','pdf')" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700">Export PDF</button>
+      <button onclick="exportData('usage')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export CSV</button>
      </div>
     </div>
     <div class="flex flex-wrap gap-2 mb-4">
@@ -213,8 +240,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
      <h2 class="text-xl font-bold text-gray-900">Riwayat Penambahan</h2>
      <div class="flex gap-2">
-      <button onclick="exportData('addition','excel')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export Excel</button>
-      <button onclick="exportData('addition','pdf')" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700">Export PDF</button>
+      <button onclick="exportData('addition')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export CSV</button>
      </div>
     </div>
     <div class="flex flex-wrap gap-2 mb-4">
@@ -391,17 +417,28 @@ function getFilterDates() {
   const now = new Date();
   const fmt = d => d.toISOString().slice(0, 10);
   let start, end;
-  if (period === "today") { start = end = fmt(now); }
-  else if (period === "month") { start = fmt(new Date(now.getFullYear(), now.getMonth(), 1)); end = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)); }
-  else if (period === "year") { start = fmt(new Date(now.getFullYear(), 0, 1)); end = fmt(new Date(now.getFullYear(), 11, 31)); }
-  else { start = document.getElementById("filter-start").value || fmt(new Date(now.getFullYear(), now.getMonth(), 1)); end = document.getElementById("filter-end").value || fmt(now); }
+  if (period === "today") {
+    start = end = fmt(now);
+  } else if (period === "month") {
+    start = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+    end = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (period === "year") {
+    start = fmt(new Date(now.getFullYear(), 0, 1));
+    end = fmt(new Date(now.getFullYear(), 11, 31));
+  } else {
+    start = document.getElementById("filter-start").value || fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+    end = document.getElementById("filter-end").value || fmt(now);
+  }
   return { start, end };
 }
 function renderDashboard() {
   const items = dataService.getUniqueItems();
   const { start, end } = getFilterDates();
   let totalNew = 0, totalReuse = 0;
-  items.forEach(it => { const stock = dataService.computeStock(it.item_name, it.size, it.status); if (it.status === "NEW") totalNew += stock; else totalReuse += stock; });
+  items.forEach(it => {
+    const stock = dataService.computeStock(it.item_name, it.size, it.status);
+    if (it.status === "NEW") totalNew += stock; else totalReuse += stock;
+  });
   document.getElementById("stat-total").textContent = totalNew + totalReuse;
   document.getElementById("stat-new").textContent = totalNew;
   document.getElementById("stat-reuse").textContent = totalReuse;
@@ -437,7 +474,10 @@ function renderDashboard() {
   comp.innerHTML = `<div class="flex items-center gap-3"><span class="text-xs font-medium w-16">NEW</span><div class="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${(totalNew/maxStock)*100}%"></div></div><span class="text-sm font-bold w-10 text-right">${totalNew}</span></div><div class="flex items-center gap-3"><span class="text-xs font-medium w-16">RE-USE</span><div class="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500 rounded-full" style="width:${(totalReuse/maxStock)*100}%"></div></div><span class="text-sm font-bold w-10 text-right">${totalReuse}</span></div>`;
   renderUsageChart(start, end);
   const usageByItem = {};
-  dataService.getUsages().filter(d => (d.date || "") >= start && (d.date || "") <= end).forEach(d => { const k = `${d.item_name} ${d.size} ${d.status}`; usageByItem[k] = (usageByItem[k] || 0) + (d.quantity || 0); });
+  dataService.getUsages().filter(d => (d.date || "") >= start && (d.date || "") <= end).forEach(d => {
+    const k = `${d.item_name} ${d.size} ${d.status}`;
+    usageByItem[k] = (usageByItem[k] || 0) + (d.quantity || 0);
+  });
   const sorted = Object.entries(usageByItem).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const topEl = document.getElementById("top-usage");
   topEl.innerHTML = sorted.length === 0 ? '<p class="text-sm text-gray-400">Belum ada data pemakaian.</p>' : sorted.map(([name, qty], i) => `<div class="flex items-center gap-3"><span class="text-xs text-gray-500 w-4">${i+1}.</span><span class="text-sm flex-1 truncate">${name}</span><div class="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${(qty/sorted[0][1])*100}%"></div></div><span class="text-sm font-bold w-8 text-right">${qty}</span></div>`).join("");
@@ -457,14 +497,52 @@ function renderDashboard() {
   }).join("") || '<tr><td colspan="9" class="px-4 py-6 text-center text-gray-400">Belum ada data</td></tr>';
 }
 function renderUsageChart(start, end) {
-  const container = document.getElementById("usage-chart");
+  const svg = document.getElementById("usage-chart-svg");
+  if (!svg) return;
+  const period = document.getElementById("filter-period").value;
   const usages = dataService.getUsages().filter(d => (d.date || "") >= start && (d.date || "") <= end);
-  const byDate = {};
-  usages.forEach(d => { byDate[d.date] = (byDate[d.date] || 0) + (d.quantity || 0); });
-  const dates = Object.keys(byDate).sort();
-  const maxVal = Math.max(...Object.values(byDate), 1);
-  if (dates.length === 0) { container.innerHTML = '<p class="text-sm text-gray-400 m-auto">Belum ada data</p>'; return; }
-  container.innerHTML = dates.slice(-14).map(d => `<div class="flex flex-col items-center flex-1 min-w-0"><div class="w-full bg-blue-500 rounded-t" style="height:${Math.max((byDate[d] / maxVal) * 100, 4)}%"></div><span class="text-[9px] text-gray-400 mt-1 truncate w-full text-center">${d.slice(5)}</span></div>`).join("");
+  const bucketMap = {};
+  const labelMap = {};
+  function bucketKey(date) {
+    if (period === "today") return date;
+    if (period === "year") return date.slice(0, 7);
+    return date.slice(0, 10);
+  }
+  usages.forEach(d => {
+    const key = bucketKey(d.date || "");
+    if (!bucketMap[key]) bucketMap[key] = { NEW: 0, "RE-USE": 0 };
+    bucketMap[key][d.status || "NEW"] += d.quantity || 0;
+    labelMap[key] = period === "year" ? key.slice(5) : key.slice(5);
+  });
+  const keys = Object.keys(bucketMap).sort();
+  const width = 1000;
+  const height = 220;
+  svg.innerHTML = "";
+  if (keys.length === 0) {
+    svg.innerHTML = '<text x="500" y="110" text-anchor="middle" fill="#9ca3af" font-size="16">Belum ada data</text>';
+    return;
+  }
+  const maxVal = Math.max(...keys.flatMap(k => [bucketMap[k].NEW, bucketMap[k]["RE-USE"]]), 1);
+  const padding = 40;
+  const chartW = width - padding * 2;
+  const chartH = height - padding * 2;
+  const step = keys.length > 1 ? chartW / (keys.length - 1) : chartW;
+  const y = v => height - padding - (v / maxVal) * chartH;
+  const x = i => padding + i * step;
+  const pointsNew = keys.map((k, i) => `${x(i)},${y(bucketMap[k].NEW)}`).join(" ");
+  const pointsReuse = keys.map((k, i) => `${x(i)},${y(bucketMap[k]["RE-USE"])}`).join(" ");
+  const axis = `
+    <line x1="${padding}" y1="${height-padding}" x2="${width-padding}" y2="${height-padding}" stroke="#d1d5db" stroke-width="1"/>
+    <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding}" stroke="#d1d5db" stroke-width="1"/>
+  `;
+  const lineNew = `<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${pointsNew}"/>`;
+  const lineReuse = `<polyline fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${pointsReuse}"/>`;
+  const dots = keys.map((k, i) => `
+    <circle cx="${x(i)}" cy="${y(bucketMap[k].NEW)}" r="4" fill="#2563eb"/>
+    <circle cx="${x(i)}" cy="${y(bucketMap[k]["RE-USE"])}" r="4" fill="#f59e0b"/>
+    <text x="${x(i)}" y="${height-12}" text-anchor="middle" fill="#6b7280" font-size="11">${labelMap[k]}</text>
+  `).join("");
+  svg.innerHTML = axis + lineNew + lineReuse + dots;
 }
 function renderStockPage() {
   const items = dataService.getUniqueItems();
@@ -529,7 +607,9 @@ function renderReports() {
 }
 function renderSettings() {
   const settings = dataService.getSettings();
-  document.getElementById("table-settings").innerHTML = settings.map(s => `<tr><td class="px-4 py-3">${s.item_name || ""}</td><td class="px-4 py-3">${s.size || ""}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${s.status === "NEW" ? "badge-new" : "badge-reuse"}">${s.status || ""}</span></td><td class="px-4 py-3 text-right">${s.target_stock || 0}</td><td class="px-4 py-3 text-right">${s.min_stock || 0}</td><td class="px-4 py-3 text-right">${s.target_usage || 0}</td><td class="px-4 py-3 text-right">${s.notes || "10"}%</td><td class="px-4 py-3 text-center"><button onclick="deleteSetting('${s.__backendId}')" class="text-red-500 hover:text-red-700 text-xs font-medium">Hapus</button></td></tr>`).join("") || '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400">Belum ada pengaturan</td></tr>';
+  const tbody = document.getElementById("table-settings");
+  if (!tbody) return;
+  tbody.innerHTML = settings.map(s => `<tr><td class="px-4 py-3">${s.item_name || ""}</td><td class="px-4 py-3">${s.size || ""}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${s.status === "NEW" ? "badge-new" : "badge-reuse"}">${s.status || ""}</span></td><td class="px-4 py-3 text-right">${s.target_stock || 0}</td><td class="px-4 py-3 text-right">${s.min_stock || 0}</td><td class="px-4 py-3 text-right">${s.target_usage || 0}</td><td class="px-4 py-3 text-right">${s.notes || "10"}%</td><td class="px-4 py-3 text-center"><button onclick="deleteSetting('${s.__backendId}')" class="text-red-500 hover:text-red-700 text-xs font-medium">Hapus</button></td></tr>`).join("") || '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400">Belum ada pengaturan</td></tr>';
 }
 async function deleteSetting(id) {
   const record = dataService.getAll().find(d => d.__backendId === id);
