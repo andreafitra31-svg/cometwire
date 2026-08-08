@@ -2,7 +2,660 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="w<!doctype html>
+<html lang="id">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comet Wire Stock Monitoring</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'DM Sans', sans-serif; }
+    :root {
+      --sidebar-w: 260px;
+      --primary: #1e40af;
+      --primary-light: #dbeafe;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --success: #16a34a;
+    }
+    .sidebar { width: var(--sidebar-w); min-height: calc(100 * min(var(--vh, 1vh), 1vh)); }
+    .main-content { margin-left: var(--sidebar-w); }
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: -280px; z-index: 50; transition: left 0.3s; }
+      .sidebar.open { left: 0; }
+      .main-content { margin-left: 0; }
+    }
+    .nav-item { transition: all 0.15s; }
+    .nav-item:hover, .nav-item.active { background: var(--primary-light); color: var(--primary); }
+    .card-stat { transition: transform 0.2s; }
+    .card-stat:hover { transform: translateY(-2px); }
+    .modal-overlay { background: rgba(0,0,0,0.5); }
+    .badge-new { background: #dbeafe; color: #1e40af; }
+    .badge-reuse { background: #fef3c7; color: #92400e; }
+    .status-aman { color: #16a34a; }
+    .status-perhatian { color: #f59e0b; }
+    .status-alert { color: #dc2626; }
+    .progress-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    table th { position: sticky; top: 0; }
+    .toast { animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+</head>
+ <body class="w-full min-h-screen bg-gray-50">
+  <aside class="sidebar fixed top-0 left-0 bg-white border-r border-gray-200 flex flex-col" id="sidebar">
+   <div class="p-5 border-b border-gray-100">
+    <h1 class="text-lg font-bold text-blue-800">Comet Wire Stock Monitoring</h1>
+    <p class="text-xs text-gray-500 mt-1">Firebase Firestore</p>
+   </div>
+   <nav class="flex-1 p-3 space-y-1" id="nav-menu">
+    <button class="nav-item active w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="dashboard">Dashboard</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="stock">Data Stok</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="add-stock">Tambah Stok</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="usage">Pemakaian</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="history-usage">Riwayat Pemakaian</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="history-add">Riwayat Penambahan</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="reports">Laporan</button>
+    <button class="nav-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left" data-page="settings">Pengaturan</button>
+   </nav>
+  </aside>
+
+  <header class="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 flex items-center px-4 py-3">
+   <button id="menu-toggle" class="p-1">☰</button>
+   <span class="ml-3 font-semibold text-blue-800 text-sm">Comet Wire Stock</span>
+  </header>
+
+  <div class="main-content p-4 md:p-6 pt-16 md:pt-6" id="main-content">
+   <section id="page-dashboard" class="page-section">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+     <h2 class="text-xl font-bold text-gray-900">Dashboard</h2>
+     <div class="flex items-center gap-2 flex-wrap">
+      <select id="filter-period" class="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white">
+       <option value="today">Hari Ini</option>
+       <option value="month" selected>Bulan Ini</option>
+       <option value="year">Tahun Ini</option>
+       <option value="custom">Custom</option>
+      </select>
+      <div id="custom-date-range" class="hidden flex items-center gap-2">
+       <input type="date" id="filter-start" class="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+       <span class="text-gray-400">—</span>
+       <input type="date" id="filter-end" class="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+      </div>
+     </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+     <div class="card-stat bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-gray-500">Total Stok</span></div>
+      <p class="text-2xl font-bold text-gray-900" id="stat-total">0</p>
+      <div class="mt-2 flex gap-3 text-xs"><span class="badge-new px-2 py-0.5 rounded-full font-medium">NEW: <span id="stat-new">0</span></span> <span class="badge-reuse px-2 py-0.5 rounded-full font-medium">RE-USE: <span id="stat-reuse">0</span></span></div>
+     </div>
+     <div class="card-stat bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-gray-500">Total Penambahan</span></div>
+      <p class="text-2xl font-bold text-green-600" id="stat-additions">+0</p>
+     </div>
+     <div class="card-stat bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-gray-500">Total Pemakaian</span></div>
+      <p class="text-2xl font-bold text-red-600" id="stat-usage">-0</p>
+     </div>
+     <div class="card-stat bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-gray-500">% Pemakaian</span></div>
+      <p class="text-2xl font-bold text-gray-900" id="stat-percent">0%</p>
+      <div class="progress-bar mt-2"><div class="progress-fill bg-blue-600" id="progress-percent" style="width:0%"></div></div>
+     </div>
+    </div>
+
+    <div id="alerts-section" class="mb-6">
+     <h3 class="text-sm font-semibold text-gray-700 mb-3">Notifikasi &amp; Alert</h3>
+     <div id="alerts-container" class="space-y-2"><div class="text-sm text-green-600 bg-green-50 rounded-lg px-4 py-3">🟢 Tidak ada peringatan saat ini.</div></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+     <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Perbandingan Stok NEW vs RE-USE</h3>
+      <div id="stock-comparison" class="space-y-3"></div>
+     </div>
+     <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Grafik Pemakaian</h3>
+      <div id="usage-chart" class="h-48 flex items-end gap-1"></div>
+     </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm mb-6">
+     <h3 class="text-sm font-semibold text-gray-700 mb-3">Top Pemakaian</h3>
+     <div id="top-usage" class="space-y-2"></div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+     <div class="p-5 border-b border-gray-100"><h3 class="text-sm font-semibold text-gray-700">Monitoring Stok</h3></div>
+     <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+       <thead class="bg-gray-50 text-gray-600">
+        <tr>
+         <th class="px-4 py-3 text-left font-medium">Item</th>
+         <th class="px-4 py-3 text-left font-medium">Size</th>
+         <th class="px-4 py-3 text-left font-medium">Status</th>
+         <th class="px-4 py-3 text-right font-medium">Stok</th>
+         <th class="px-4 py-3 text-right font-medium">Min</th>
+         <th class="px-4 py-3 text-right font-medium">Pemakaian</th>
+         <th class="px-4 py-3 text-right font-medium">Target</th>
+         <th class="px-4 py-3 text-right font-medium">%</th>
+         <th class="px-4 py-3 text-center font-medium">Status</th>
+        </tr>
+       </thead>
+       <tbody id="monitoring-table" class="divide-y divide-gray-100"></tbody>
+      </table>
+     </div>
+    </div>
+   </section>
+
+   <section id="page-add-stock" class="page-section hidden">
+    <h2 class="text-xl font-bold text-gray-900 mb-6">Tambah Stok</h2>
+    <form id="form-add-stock" class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm max-w-lg space-y-4">
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Tanggal</label><input type="date" id="add-date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Item</label><input type="text" id="add-item" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Comet Wire" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Size</label><select id="add-size" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="0.014">0.014</option><option value="0.018">0.018</option><option value="0.035">0.035</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Status</label><select id="add-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="NEW">NEW</option><option value="RE-USE">RE-USE</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Jumlah</label><input type="number" id="add-qty" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Sumber</label><input type="text" id="add-source" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Supplier / PO"></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><textarea id="add-notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows="2"></textarea></div>
+     <button type="submit" class="w-full py-2.5 rounded-lg text-white font-semibold text-sm bg-blue-700 hover:bg-blue-800 transition">Simpan Penambahan</button>
+    </form>
+   </section>
+
+   <section id="page-usage" class="page-section hidden">
+    <h2 class="text-xl font-bold text-gray-900 mb-6">Catat Pemakaian</h2>
+    <form id="form-usage" class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm max-w-lg space-y-4">
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Tanggal</label><input type="date" id="use-date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Item</label><input type="text" id="use-item" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Comet Wire" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Size</label><select id="use-size" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="0.014">0.014</option><option value="0.018">0.018</option><option value="0.035">0.035</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Status</label><select id="use-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="NEW">NEW</option><option value="RE-USE">RE-USE</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Jumlah</label><input type="number" id="use-qty" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Cath Lab / Ruangan</label><input type="text" id="use-room" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Cath Lab 1"></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan Penggunaan</label>
+      <select id="use-procedure" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
+       <option value="PCI">PCI</option><option value="CTO">CTO</option><option value="Angiography">Angiography</option><option value="Backup">Backup</option><option value="Percobaan tindakan">Percobaan tindakan</option><option value="Rusak">Rusak</option><option value="Tidak dapat digunakan">Tidak dapat digunakan</option><option value="Re-use">Re-use</option><option value="Lainnya">Lainnya</option>
+      </select>
+     </div>
+     <div id="use-other-wrap" class="hidden"><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan Lainnya</label><input type="text" id="use-other" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Catatan Tambahan</label><textarea id="use-notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows="2"></textarea></div>
+     <button type="submit" class="w-full py-2.5 rounded-lg text-white font-semibold text-sm bg-red-600 hover:bg-red-700 transition">Simpan Pemakaian</button>
+    </form>
+   </section>
+
+   <section id="page-history-usage" class="page-section hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+     <h2 class="text-xl font-bold text-gray-900">Riwayat Pemakaian</h2>
+     <div class="flex gap-2">
+      <button onclick="exportData('usage','excel')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export Excel</button>
+      <button onclick="exportData('usage','pdf')" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700">Export PDF</button>
+     </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mb-4">
+     <input type="text" id="search-usage" placeholder="Cari..." class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+     <select id="filter-usage-status" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+      <option value="">Semua Status</option><option value="NEW">NEW</option><option value="RE-USE">RE-USE</option>
+     </select>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+     <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-600">
+       <tr>
+        <th class="px-4 py-3 text-left font-medium">Tanggal</th><th class="px-4 py-3 text-left font-medium">Item</th><th class="px-4 py-3 text-left font-medium">Size</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-right font-medium">Jumlah</th><th class="px-4 py-3 text-left font-medium">Tindakan</th><th class="px-4 py-3 text-left font-medium">Keterangan</th>
+       </tr>
+      </thead>
+      <tbody id="table-history-usage" class="divide-y divide-gray-100"></tbody>
+     </table>
+    </div>
+   </section>
+
+   <section id="page-history-add" class="page-section hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+     <h2 class="text-xl font-bold text-gray-900">Riwayat Penambahan</h2>
+     <div class="flex gap-2">
+      <button onclick="exportData('addition','excel')" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">Export Excel</button>
+      <button onclick="exportData('addition','pdf')" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700">Export PDF</button>
+     </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mb-4">
+     <input type="text" id="search-addition" placeholder="Cari..." class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+     <select id="filter-add-status" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+      <option value="">Semua Status</option><option value="NEW">NEW</option><option value="RE-USE">RE-USE</option>
+     </select>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+     <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-600">
+       <tr>
+        <th class="px-4 py-3 text-left font-medium">Tanggal</th><th class="px-4 py-3 text-left font-medium">Item</th><th class="px-4 py-3 text-left font-medium">Size</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-right font-medium">Jumlah</th><th class="px-4 py-3 text-left font-medium">Sumber</th><th class="px-4 py-3 text-left font-medium">Keterangan</th>
+       </tr>
+      </thead>
+      <tbody id="table-history-add" class="divide-y divide-gray-100"></tbody>
+     </table>
+    </div>
+   </section>
+
+   <section id="page-stock" class="page-section hidden">
+    <h2 class="text-xl font-bold text-gray-900 mb-6">Data Stok</h2>
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+     <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-600">
+       <tr>
+        <th class="px-4 py-3 text-left font-medium">Item</th><th class="px-4 py-3 text-left font-medium">Size</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-right font-medium">Stok</th><th class="px-4 py-3 text-right font-medium">Target</th><th class="px-4 py-3 text-right font-medium">Minimum</th><th class="px-4 py-3 text-center font-medium">Kondisi</th>
+       </tr>
+      </thead>
+      <tbody id="table-stock" class="divide-y divide-gray-100"></tbody>
+     </table>
+    </div>
+   </section>
+
+   <section id="page-reports" class="page-section hidden">
+    <h2 class="text-xl font-bold text-gray-900 mb-6">Laporan</h2>
+    <div class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm space-y-6">
+     <div>
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Persentase Pemakaian Bulanan</h3>
+      <div class="overflow-x-auto">
+       <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-600">
+         <tr>
+          <th class="px-4 py-3 text-left font-medium">Bulan</th><th class="px-4 py-3 text-right font-medium">Target</th><th class="px-4 py-3 text-right font-medium">Pemakaian</th><th class="px-4 py-3 text-right font-medium">%</th><th class="px-4 py-3 text-center font-medium">Status</th>
+         </tr>
+        </thead>
+        <tbody id="table-monthly" class="divide-y divide-gray-100"></tbody>
+       </table>
+      </div>
+     </div>
+     <div>
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Prediksi &amp; Rekomendasi</h3>
+      <div id="prediction-section" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
+     </div>
+    </div>
+   </section>
+
+   <section id="page-settings" class="page-section hidden">
+    <h2 class="text-xl font-bold text-gray-900 mb-6">Pengaturan Item</h2>
+    <form id="form-settings" class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm max-w-lg space-y-4">
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Item</label><input type="text" id="set-item" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Comet Wire" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Size</label><select id="set-size" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="0.014">0.014</option><option value="0.018">0.018</option><option value="0.035">0.035</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Status</label><select id="set-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required><option value="NEW">NEW</option><option value="RE-USE">RE-USE</option></select></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Target Stok</label><input type="number" id="set-target-stock" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Minimum Stok</label><input type="number" id="set-min-stock" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Target Pemakaian Bulanan</label><input type="number" id="set-target-usage" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required></div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-1">Buffer (%)</label><input type="number" id="set-buffer" min="0" max="100" value="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+     <button type="submit" class="w-full py-2.5 rounded-lg text-white font-semibold text-sm bg-gray-800 hover:bg-gray-900 transition">Simpan Pengaturan</button>
+    </form>
+    <div class="mt-6 bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+     <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-600">
+       <tr>
+        <th class="px-4 py-3 text-left font-medium">Item</th><th class="px-4 py-3 text-left font-medium">Size</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-right font-medium">Target Stok</th><th class="px-4 py-3 text-right font-medium">Min Stok</th><th class="px-4 py-3 text-right font-medium">Target Pakai</th><th class="px-4 py-3 text-right font-medium">Buffer</th><th class="px-4 py-3 text-center font-medium">Aksi</th>
+       </tr>
+      </thead>
+      <tbody id="table-settings" class="divide-y divide-gray-100"></tbody>
+     </table>
+    </div>
+   </section>
+  </div>
+
+  <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+  <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCA2n4z78k2XoSWwRvSYIlUi9--SD_yW4M",
+  authDomain: "cometwire.firebaseapp.com",
+  projectId: "cometwire",
+  storageBucket: "cometwire.firebasestorage.app",
+  messagingSenderId: "847211062831",
+  appId: "1:847211062831:web:02d75de59440978a7a48da",
+  measurementId: "G-NLRWXNVVH6"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const COLLECTION = "records";
+
+const dataService = {
+  _data: [],
+  _listeners: [],
+  subscribe(fn) { this._listeners.push(fn); },
+  _notify() { this._listeners.forEach(fn => fn(this._data)); },
+  async init() {
+    db.collection(COLLECTION).onSnapshot((snap) => {
+      this._data = snap.docs.map(doc => ({ __backendId: doc.id, ...doc.data() }));
+      this._notify();
+    }, () => showToast("Gagal memuat data Firestore", "error"));
+  },
+  getAll() { return this._data; },
+  getByType(type) { return this._data.filter(d => d.type === type); },
+  async create(record) { try { await db.collection(COLLECTION).add(record); return true; } catch (e) { showToast("Gagal menyimpan data", "error"); return false; } },
+  async update(record) { try { await db.collection(COLLECTION).doc(record.__backendId).set({ ...record }); return true; } catch (e) { showToast("Gagal memperbarui data", "error"); return false; } },
+  async delete(record) { try { await db.collection(COLLECTION).doc(record.__backendId).delete(); return true; } catch (e) { showToast("Gagal menghapus data", "error"); return false; } },
+  getSettings() { return this.getByType("settings"); },
+  getAdditions() { return this.getByType("addition"); },
+  getUsages() { return this.getByType("usage"); },
+  getAdjustments() { return this.getByType("adjustment"); },
+  getItemSetting(item, size, status) { return this.getSettings().find(s => s.item_name === item && s.size === size && s.status === status); },
+  computeStock(item, size, status) {
+    const adds = this.getAdditions().filter(d => d.item_name === item && d.size === size && d.status === status);
+    const uses = this.getUsages().filter(d => d.item_name === item && d.size === size && d.status === status);
+    const adjs = this.getAdjustments().filter(d => d.item_name === item && d.size === size && d.status === status);
+    const totalAdd = adds.reduce((s, d) => s + (d.quantity || 0), 0);
+    const totalUse = uses.reduce((s, d) => s + (d.quantity || 0), 0);
+    const totalAdj = adjs.reduce((s, d) => s + (d.quantity || 0), 0);
+    return totalAdd - totalUse + totalAdj;
+  },
+  getUniqueItems() {
+    const map = new Map();
+    this._data.forEach(d => {
+      if (d.item_name && d.size && d.status && d.type !== "settings") {
+        map.set(`${d.item_name}|${d.size}|${d.status}`, { item_name: d.item_name, size: d.size, status: d.status });
+      }
+    });
+    this.getSettings().forEach(d => map.set(`${d.item_name}|${d.size}|${d.status}`, { item_name: d.item_name, size: d.size, status: d.status }));
+    return [...map.values()];
+  },
+  getUsageInPeriod(item, size, status, startDate, endDate) {
+    return this.getUsages().filter(d => d.item_name === item && d.size === size && d.status === status && (d.date || "") >= startDate && (d.date || "") <= endDate).reduce((s, d) => s + (d.quantity || 0), 0);
+  },
+  getAdditionsInPeriod(startDate, endDate) { return this.getAdditions().filter(d => (d.date || "") >= startDate && (d.date || "") <= endDate).reduce((s, d) => s + (d.quantity || 0), 0); },
+  getUsagesInPeriod(startDate, endDate) { return this.getUsages().filter(d => (d.date || "") >= startDate && (d.date || "") <= endDate).reduce((s, d) => s + (d.quantity || 0), 0); }
+};
+
+let currentPage = "dashboard";
+function showToast(msg, type = "success") {
+  const c = document.getElementById("toast-container");
+  const el = document.createElement("div");
+  el.className = `toast text-sm px-4 py-3 rounded-lg shadow-lg font-medium ${type === "error" ? "bg-red-600 text-white" : "bg-green-600 text-white"}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+function navigateTo(page) {
+  document.querySelectorAll(".page-section").forEach(s => s.classList.add("hidden"));
+  const target = document.getElementById("page-" + page);
+  if (target) target.classList.remove("hidden");
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  const navBtn = document.querySelector(`[data-page="${page}"]`);
+  if (navBtn) navBtn.classList.add("active");
+  currentPage = page;
+  if (page === "dashboard") renderDashboard();
+  if (page === "stock") renderStockPage();
+  if (page === "history-usage") renderHistoryUsage();
+  if (page === "history-add") renderHistoryAdd();
+  if (page === "reports") renderReports();
+  if (page === "settings") renderSettings();
+  document.getElementById("sidebar").classList.remove("open");
+}
+function getFilterDates() {
+  const period = document.getElementById("filter-period").value;
+  const now = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  let start, end;
+  if (period === "today") { start = end = fmt(now); }
+  else if (period === "month") { start = fmt(new Date(now.getFullYear(), now.getMonth(), 1)); end = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)); }
+  else if (period === "year") { start = fmt(new Date(now.getFullYear(), 0, 1)); end = fmt(new Date(now.getFullYear(), 11, 31)); }
+  else { start = document.getElementById("filter-start").value || fmt(new Date(now.getFullYear(), now.getMonth(), 1)); end = document.getElementById("filter-end").value || fmt(now); }
+  return { start, end };
+}
+function renderDashboard() {
+  const items = dataService.getUniqueItems();
+  const { start, end } = getFilterDates();
+  let totalNew = 0, totalReuse = 0;
+  items.forEach(it => { const stock = dataService.computeStock(it.item_name, it.size, it.status); if (it.status === "NEW") totalNew += stock; else totalReuse += stock; });
+  document.getElementById("stat-total").textContent = totalNew + totalReuse;
+  document.getElementById("stat-new").textContent = totalNew;
+  document.getElementById("stat-reuse").textContent = totalReuse;
+  const totalAdds = dataService.getAdditionsInPeriod(start, end);
+  const totalUses = dataService.getUsagesInPeriod(start, end);
+  document.getElementById("stat-additions").textContent = "+" + totalAdds;
+  document.getElementById("stat-usage").textContent = "-" + totalUses;
+  const totalTarget = dataService.getSettings().reduce((s, d) => s + (d.target_usage || 0), 0);
+  const pct = totalTarget > 0 ? Math.round((totalUses / totalTarget) * 100) : 0;
+  document.getElementById("stat-percent").textContent = pct + "%";
+  const bar = document.getElementById("progress-percent");
+  bar.style.width = Math.min(pct, 100) + "%";
+  bar.className = "progress-fill " + (pct > 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-blue-600");
+  const alerts = [];
+  items.forEach(it => {
+    const stock = dataService.computeStock(it.item_name, it.size, it.status);
+    const setting = dataService.getItemSetting(it.item_name, it.size, it.status);
+    if (setting) {
+      if (stock <= (setting.min_stock || 0)) alerts.push({ level: "red", msg: `🔴 Stok Menipis: ${it.item_name} ${it.size} ${it.status} tersisa ${stock} pcs (min: ${setting.min_stock})` });
+      const usage = dataService.getUsageInPeriod(it.item_name, it.size, it.status, start, end);
+      const target = setting.target_usage || 0;
+      if (target > 0) {
+        const p = (usage / target) * 100;
+        if (p > 100) alerts.push({ level: "red", msg: `🔴 Target Terlampaui: ${it.item_name} ${it.size} ${it.status} — ${usage}/${target}` });
+        else if (p >= 80) alerts.push({ level: "yellow", msg: `🟡 Mendekati Target: ${it.item_name} ${it.size} ${it.status} — ${usage}/${target}` });
+      }
+    }
+  });
+  const ac = document.getElementById("alerts-container");
+  ac.innerHTML = alerts.length === 0 ? '<div class="text-sm text-green-600 bg-green-50 rounded-lg px-4 py-3">🟢 Tidak ada peringatan saat ini.</div>' : alerts.map(a => `<div class="text-sm ${a.level === "red" ? "text-red-700 bg-red-50" : "text-amber-700 bg-amber-50"} rounded-lg px-4 py-3">${a.msg}</div>`).join("");
+  const comp = document.getElementById("stock-comparison");
+  const maxStock = Math.max(totalNew, totalReuse, 1);
+  comp.innerHTML = `<div class="flex items-center gap-3"><span class="text-xs font-medium w-16">NEW</span><div class="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${(totalNew/maxStock)*100}%"></div></div><span class="text-sm font-bold w-10 text-right">${totalNew}</span></div><div class="flex items-center gap-3"><span class="text-xs font-medium w-16">RE-USE</span><div class="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500 rounded-full" style="width:${(totalReuse/maxStock)*100}%"></div></div><span class="text-sm font-bold w-10 text-right">${totalReuse}</span></div>`;
+  renderUsageChart(start, end);
+  const usageByItem = {};
+  dataService.getUsages().filter(d => (d.date || "") >= start && (d.date || "") <= end).forEach(d => { const k = `${d.item_name} ${d.size} ${d.status}`; usageByItem[k] = (usageByItem[k] || 0) + (d.quantity || 0); });
+  const sorted = Object.entries(usageByItem).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topEl = document.getElementById("top-usage");
+  topEl.innerHTML = sorted.length === 0 ? '<p class="text-sm text-gray-400">Belum ada data pemakaian.</p>' : sorted.map(([name, qty], i) => `<div class="flex items-center gap-3"><span class="text-xs text-gray-500 w-4">${i+1}.</span><span class="text-sm flex-1 truncate">${name}</span><div class="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${(qty/sorted[0][1])*100}%"></div></div><span class="text-sm font-bold w-8 text-right">${qty}</span></div>`).join("");
+  const tbody = document.getElementById("monitoring-table");
+  tbody.innerHTML = items.map(it => {
+    const stock = dataService.computeStock(it.item_name, it.size, it.status);
+    const setting = dataService.getItemSetting(it.item_name, it.size, it.status);
+    const minStock = setting ? setting.min_stock || 0 : 0;
+    const targetUsage = setting ? setting.target_usage || 0 : 0;
+    const usage = dataService.getUsageInPeriod(it.item_name, it.size, it.status, start, end);
+    const pctItem = targetUsage > 0 ? Math.round((usage / targetUsage) * 100) : 0;
+    let statusLabel, statusClass;
+    if (stock <= minStock || pctItem > 100) { statusLabel = "🔴 Alert"; statusClass = "status-alert"; }
+    else if (stock <= minStock + 2 || pctItem >= 80) { statusLabel = "🟡 Perhatian"; statusClass = "status-perhatian"; }
+    else { statusLabel = "🟢 Aman"; statusClass = "status-aman"; }
+    return `<tr><td class="px-4 py-3">${it.item_name}</td><td class="px-4 py-3">${it.size}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${it.status === "NEW" ? "badge-new" : "badge-reuse"}">${it.status}</span></td><td class="px-4 py-3 text-right font-bold">${stock}</td><td class="px-4 py-3 text-right text-gray-500">${minStock}</td><td class="px-4 py-3 text-right">${usage}</td><td class="px-4 py-3 text-right text-gray-500">${targetUsage}</td><td class="px-4 py-3 text-right">${pctItem}%</td><td class="px-4 py-3 text-center text-xs font-semibold ${statusClass}">${statusLabel}</td></tr>`;
+  }).join("") || '<tr><td colspan="9" class="px-4 py-6 text-center text-gray-400">Belum ada data</td></tr>';
+}
+function renderUsageChart(start, end) {
+  const container = document.getElementById("usage-chart");
+  const usages = dataService.getUsages().filter(d => (d.date || "") >= start && (d.date || "") <= end);
+  const byDate = {};
+  usages.forEach(d => { byDate[d.date] = (byDate[d.date] || 0) + (d.quantity || 0); });
+  const dates = Object.keys(byDate).sort();
+  const maxVal = Math.max(...Object.values(byDate), 1);
+  if (dates.length === 0) { container.innerHTML = '<p class="text-sm text-gray-400 m-auto">Belum ada data</p>'; return; }
+  container.innerHTML = dates.slice(-14).map(d => `<div class="flex flex-col items-center flex-1 min-w-0"><div class="w-full bg-blue-500 rounded-t" style="height:${Math.max((byDate[d] / maxVal) * 100, 4)}%"></div><span class="text-[9px] text-gray-400 mt-1 truncate w-full text-center">${d.slice(5)}</span></div>`).join("");
+}
+function renderStockPage() {
+  const items = dataService.getUniqueItems();
+  document.getElementById("table-stock").innerHTML = items.map(it => {
+    const stock = dataService.computeStock(it.item_name, it.size, it.status);
+    const setting = dataService.getItemSetting(it.item_name, it.size, it.status);
+    const target = setting ? setting.target_stock || 0 : 0;
+    const min = setting ? setting.min_stock || 0 : 0;
+    let cond = "🟢 Aman", cls = "status-aman";
+    if (stock <= min) { cond = "🔴 Kritis"; cls = "status-alert"; }
+    else if (stock <= min + 2) { cond = "🟡 Rendah"; cls = "status-perhatian"; }
+    return `<tr><td class="px-4 py-3">${it.item_name}</td><td class="px-4 py-3">${it.size}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${it.status === "NEW" ? "badge-new" : "badge-reuse"}">${it.status}</span></td><td class="px-4 py-3 text-right font-bold">${stock}</td><td class="px-4 py-3 text-right">${target}</td><td class="px-4 py-3 text-right">${min}</td><td class="px-4 py-3 text-center text-xs font-semibold ${cls}">${cond}</td></tr>`;
+  }).join("") || '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">Belum ada data</td></tr>';
+}
+function renderHistoryUsage() {
+  const filter = document.getElementById("filter-usage-status").value;
+  const search = document.getElementById("search-usage").value.toLowerCase();
+  let data = dataService.getUsages();
+  if (filter) data = data.filter(d => d.status === filter);
+  if (search) data = data.filter(d => (d.item_name || "").toLowerCase().includes(search) || (d.procedure_type || "").toLowerCase().includes(search));
+  data.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  document.getElementById("table-history-usage").innerHTML = data.slice(0, 50).map(d => `<tr><td class="px-4 py-3">${d.date || ""}</td><td class="px-4 py-3">${d.item_name || ""}</td><td class="px-4 py-3">${d.size || ""}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${d.status === "NEW" ? "badge-new" : "badge-reuse"}">${d.status || ""}</span></td><td class="px-4 py-3 text-right font-medium">${d.quantity || 0}</td><td class="px-4 py-3">${d.procedure_type || ""}</td><td class="px-4 py-3 text-gray-500">${d.notes || ""}</td></tr>`).join("") || '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">Belum ada data</td></tr>';
+}
+function renderHistoryAdd() {
+  const filter = document.getElementById("filter-add-status").value;
+  const search = document.getElementById("search-addition").value.toLowerCase();
+  let data = dataService.getAdditions();
+  if (filter) data = data.filter(d => d.status === filter);
+  if (search) data = data.filter(d => (d.item_name || "").toLowerCase().includes(search));
+  data.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  document.getElementById("table-history-add").innerHTML = data.slice(0, 50).map(d => `<tr><td class="px-4 py-3">${d.date || ""}</td><td class="px-4 py-3">${d.item_name || ""}</td><td class="px-4 py-3">${d.size || ""}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${d.status === "NEW" ? "badge-new" : "badge-reuse"}">${d.status || ""}</span></td><td class="px-4 py-3 text-right font-medium">${d.quantity || 0}</td><td class="px-4 py-3">${d.source || ""}</td><td class="px-4 py-3 text-gray-500">${d.notes || ""}</td></tr>`).join("") || '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">Belum ada data</td></tr>';
+}
+function renderReports() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+  const totalTarget = dataService.getSettings().reduce((s, d) => s + (d.target_usage || 0), 0);
+  const tbody = document.getElementById("table-monthly");
+  tbody.innerHTML = months.map((m, i) => {
+    const start = `${year}-${String(i+1).padStart(2, "0")}-01`;
+    const end = `${year}-${String(i+1).padStart(2, "0")}-${new Date(year, i+1, 0).getDate()}`;
+    const usage = dataService.getUsagesInPeriod(start, end);
+    const pct = totalTarget > 0 ? Math.round((usage / totalTarget) * 100) : 0;
+    let st, cls;
+    if (pct > 100) { st = "Terlampaui"; cls = "text-red-600"; }
+    else if (pct === 100) { st = "Tercapai"; cls = "text-orange-600"; }
+    else if (pct >= 80) { st = "Mendekati"; cls = "text-amber-600"; }
+    else { st = "Aman"; cls = "text-green-600"; }
+    return `<tr><td class="px-4 py-2">${m}</td><td class="px-4 py-2 text-right">${totalTarget}</td><td class="px-4 py-2 text-right">${usage}</td><td class="px-4 py-2 text-right">${pct}%</td><td class="px-4 py-2 text-center text-xs font-semibold ${cls}">${st}</td></tr>`;
+  }).join("");
+  const items = dataService.getUniqueItems();
+  const pred = document.getElementById("prediction-section");
+  const allUsages = dataService.getUsages();
+  const monthsWithData = new Set(allUsages.map(d => (d.date || "").slice(0, 7)));
+  const numMonths = Math.max(monthsWithData.size, 1);
+  const totalUsageAll = allUsages.reduce((s, d) => s + (d.quantity || 0), 0);
+  const avgMonthly = Math.round(totalUsageAll / numMonths);
+  const totalStock = items.reduce((s, it) => s + dataService.computeStock(it.item_name, it.size, it.status), 0);
+  const buffer = 10;
+  const need = Math.max(Math.ceil(avgMonthly * (1 + buffer/100)) - totalStock, 0);
+  pred.innerHTML = `<div class="bg-blue-50 rounded-lg p-4"><p class="text-xs text-gray-500">Rata-rata Pemakaian</p><p class="text-xl font-bold text-blue-800">${avgMonthly} pcs/bulan</p></div><div class="bg-gray-50 rounded-lg p-4"><p class="text-xs text-gray-500">Stok Saat Ini</p><p class="text-xl font-bold">${totalStock} pcs</p></div><div class="bg-amber-50 rounded-lg p-4"><p class="text-xs text-gray-500">Rekomendasi Pengadaan</p><p class="text-xl font-bold text-amber-700">${need} pcs</p></div>`;
+}
+function renderSettings() {
+  const settings = dataService.getSettings();
+  document.getElementById("table-settings").innerHTML = settings.map(s => `<tr><td class="px-4 py-3">${s.item_name || ""}</td><td class="px-4 py-3">${s.size || ""}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${s.status === "NEW" ? "badge-new" : "badge-reuse"}">${s.status || ""}</span></td><td class="px-4 py-3 text-right">${s.target_stock || 0}</td><td class="px-4 py-3 text-right">${s.min_stock || 0}</td><td class="px-4 py-3 text-right">${s.target_usage || 0}</td><td class="px-4 py-3 text-right">${s.notes || "10"}%</td><td class="px-4 py-3 text-center"><button onclick="deleteSetting('${s.__backendId}')" class="text-red-500 hover:text-red-700 text-xs font-medium">Hapus</button></td></tr>`).join("") || '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400">Belum ada pengaturan</td></tr>';
+}
+async function deleteSetting(id) {
+  const record = dataService.getAll().find(d => d.__backendId === id);
+  if (record) await dataService.delete(record);
+}
+function exportData(type) {
+  const data = type === "usage" ? dataService.getUsages() : dataService.getAdditions();
+  if (data.length === 0) { showToast("Tidak ada data untuk diekspor", "error"); return; }
+  const headers = type === "usage" ? ["Tanggal","Item","Size","Status","Jumlah","Tindakan","Keterangan"] : ["Tanggal","Item","Size","Status","Jumlah","Sumber","Keterangan"];
+  const fields = type === "usage" ? ["date","item_name","size","status","quantity","procedure_type","notes"] : ["date","item_name","size","status","quantity","source","notes"];
+  const csv = [headers.join(","), ...data.map(d => fields.map(f => `"${(d[f] || "").toString().replace(/"/g,'""')}"`).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${type}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("Data berhasil diekspor");
+}
+document.getElementById("nav-menu").addEventListener("click", e => { const btn = e.target.closest("[data-page]"); if (btn) navigateTo(btn.dataset.page); });
+document.getElementById("menu-toggle")?.addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
+document.getElementById("filter-period").addEventListener("change", function() { document.getElementById("custom-date-range").classList.toggle("hidden", this.value !== "custom"); renderDashboard(); });
+document.getElementById("filter-start")?.addEventListener("change", renderDashboard);
+document.getElementById("filter-end")?.addEventListener("change", renderDashboard);
+document.getElementById("use-procedure").addEventListener("change", function() { document.getElementById("use-other-wrap").classList.toggle("hidden", this.value !== "Lainnya"); });
+document.getElementById("form-add-stock").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = "Menyimpan...";
+  const ok = await dataService.create({
+    type: "addition",
+    item_name: document.getElementById("add-item").value,
+    size: document.getElementById("add-size").value,
+    status: document.getElementById("add-status").value,
+    quantity: parseInt(document.getElementById("add-qty").value),
+    date: document.getElementById("add-date").value,
+    source: document.getElementById("add-source").value,
+    notes: document.getElementById("add-notes").value,
+    room: "", procedure_type: "", target_stock: 0, min_stock: 0, target_usage: 0
+  });
+  btn.disabled = false;
+  btn.textContent = "Simpan Penambahan";
+  if (ok) { showToast("Stok berhasil ditambahkan"); this.reset(); setDefaultDate(); }
+});
+document.getElementById("form-usage").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const item = document.getElementById("use-item").value;
+  const size = document.getElementById("use-size").value;
+  const status = document.getElementById("use-status").value;
+  const qty = parseInt(document.getElementById("use-qty").value);
+  const currentStock = dataService.computeStock(item, size, status);
+  if (qty > currentStock) { showToast("Stok tidak mencukupi.", "error"); return; }
+  const btn = this.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = "Menyimpan...";
+  const proc = document.getElementById("use-procedure").value;
+  const ok = await dataService.create({
+    type: "usage",
+    item_name: item, size, status, quantity: qty,
+    date: document.getElementById("use-date").value,
+    room: document.getElementById("use-room").value,
+    procedure_type: proc === "Lainnya" ? document.getElementById("use-other").value : proc,
+    notes: document.getElementById("use-notes").value,
+    source: "", target_stock: 0, min_stock: 0, target_usage: 0
+  });
+  btn.disabled = false;
+  btn.textContent = "Simpan Pemakaian";
+  if (ok) { showToast("Pemakaian berhasil dicatat"); this.reset(); setDefaultDate(); }
+});
+document.getElementById("form-settings").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  const item = document.getElementById("set-item").value;
+  const size = document.getElementById("set-size").value;
+  const status = document.getElementById("set-status").value;
+  const existing = dataService.getItemSetting(item, size, status);
+  const record = {
+    type: "settings",
+    item_name: item,
+    size,
+    status,
+    target_stock: parseInt(document.getElementById("set-target-stock").value),
+    min_stock: parseInt(document.getElementById("set-min-stock").value),
+    target_usage: parseInt(document.getElementById("set-target-usage").value),
+    notes: document.getElementById("set-buffer").value,
+    quantity: 0, date: "", source: "", room: "", procedure_type: ""
+  };
+  let ok;
+  if (existing) ok = await dataService.update({ ...existing, ...record });
+  else ok = await dataService.create(record);
+  btn.disabled = false;
+  if (ok) { showToast("Pengaturan disimpan"); this.reset(); }
+});
+document.getElementById("search-usage")?.addEventListener("input", renderHistoryUsage);
+document.getElementById("filter-usage-status")?.addEventListener("change", renderHistoryUsage);
+document.getElementById("search-addition")?.addEventListener("input", renderHistoryAdd);
+document.getElementById("filter-add-status")?.addEventListener("change", renderHistoryAdd);
+function setDefaultDate() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById("add-date").value = today;
+  document.getElementById("use-date").value = today;
+}
+async function init() {
+  setDefaultDate();
+  dataService.subscribe(() => {
+    if (currentPage === "dashboard") renderDashboard();
+    else if (currentPage === "stock") renderStockPage();
+    else if (currentPage === "history-usage") renderHistoryUsage();
+    else if (currentPage === "history-add") renderHistoryAdd();
+    else if (currentPage === "reports") renderReports();
+    else if (currentPage === "settings") renderSettings();
+  });
+  await dataService.init();
+  navigateTo("dashboard");
+}
+init();
+  </script>
+ </body>
+</html>idth=device-width, initial-scale=1.0" />
   <title>Comet Wire Stock Monitoring</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
