@@ -1255,6 +1255,133 @@ async function init() {
   navigateTo("dashboard");
 }
 init();
+const originalRenderReports = renderReports;
+
+renderReports = function () {
+  // Tetap jalankan laporan dan grafik yang sudah ada
+  originalRenderReports();
+
+  const mode = document.getElementById("report-date-mode").value;
+  const { start, end } = getDateRange(
+    mode,
+    document.getElementById("report-start"),
+    document.getElementById("report-end")
+  );
+
+  const status = reportStatus;
+  const size = document.getElementById("report-size").value;
+  const item = document.getElementById("report-item").value;
+
+  const isMatch = record =>
+    (!status || status === "ALL" || record.status === status) &&
+    (!size || record.size === size) &&
+    (!item || record.item_name === item) &&
+    (record.date || "") >= start &&
+    (record.date || "") <= end;
+
+  const additions = dataService
+    .getAdditions()
+    .filter(isMatch)
+    .map(record => ({
+      ...record,
+      transaction_type: "PEMASUKAN",
+      description: record.source || record.notes || "-"
+    }));
+
+  const usages = dataService
+    .getUsages()
+    .filter(isMatch)
+    .map(record => ({
+      ...record,
+      transaction_type: "PEMAKAIAN",
+      description: record.procedure_type || record.notes || "-"
+    }));
+
+  const allTransactions = [...additions, ...usages].sort((a, b) => {
+    const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    // Jika tanggal sama, pemasukan ditampilkan lebih dahulu
+    return a.transaction_type.localeCompare(b.transaction_type);
+  });
+
+  const table = document.getElementById("table-reports");
+  const tableHead = table?.closest("table")?.querySelector("thead tr");
+
+  if (tableHead) {
+    tableHead.innerHTML = `
+      <th class="px-4 py-3 text-left font-medium">Tanggal</th>
+      <th class="px-4 py-3 text-left font-medium">Jenis Transaksi</th>
+      <th class="px-4 py-3 text-left font-medium">Item</th>
+      <th class="px-4 py-3 text-left font-medium">Size</th>
+      <th class="px-4 py-3 text-left font-medium">Status</th>
+      <th class="px-4 py-3 text-right font-medium">Jumlah</th>
+      <th class="px-4 py-3 text-left font-medium">Keterangan</th>
+    `;
+  }
+
+  if (!allTransactions.length) {
+    table.innerHTML = `
+      <tr>
+        <td colspan="7" class="px-4 py-6 text-center text-[#708993]">
+          Belum ada data pemasukan atau pemakaian
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  table.innerHTML = allTransactions
+    .slice(0, 500)
+    .map(record => {
+      const isAddition = record.transaction_type === "PEMASUKAN";
+      const typeClass = isAddition
+        ? "bg-[#eef7f5] text-[#3b7a6e]"
+        : "bg-[#fff7ed] text-[#b45309]";
+
+      return `
+        <tr>
+          <td class="px-4 py-3 text-[#19183B]">
+            ${record.date || "-"}
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${typeClass}">
+              ${record.transaction_type}
+            </span>
+          </td>
+
+          <td class="px-4 py-3 text-[#19183B]">
+            ${record.item_name || "-"}
+          </td>
+
+          <td class="px-4 py-3 text-[#19183B]">
+            ${record.size || "-"}
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${
+              record.status === "NEW" ? "badge-new" : "badge-reuse"
+            }">
+              ${record.status || "-"}
+            </span>
+          </td>
+
+          <td class="px-4 py-3 text-right font-semibold text-[#19183B]">
+            ${isAddition ? "+" : "-"}${Number(record.quantity || 0)}
+          </td>
+
+          <td class="px-4 py-3 text-[#708993]">
+            ${record.description}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+};
   </script>
  </body>
 </html>
